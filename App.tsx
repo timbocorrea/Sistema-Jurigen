@@ -9,6 +9,7 @@ import EvidenceGathering from './components/EvidenceGathering';
 import LegalChatbot from './components/LegalChatbot';
 import { CaseStep, FileData, Dossier } from './types';
 import { analyzeDocumentsAndFacts } from './services/geminiService';
+import { dossierService } from './services/dossierService';
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<CaseStep>(CaseStep.INITIAL_FACTS);
@@ -16,6 +17,23 @@ const App: React.FC = () => {
   const [files, setFiles] = useState<FileData[]>([]);
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Load latest dossier on mount
+  React.useEffect(() => {
+    const loadDossier = async () => {
+      try {
+        const savedDossier = await dossierService.getLatestDossier();
+        if (savedDossier) {
+          setDossier(savedDossier);
+          // Optional: Prompt user or auto-navigate? For now just load state.
+          console.log("Dossier loaded from Supabase");
+        }
+      } catch (error) {
+        console.error("Error loading dossier:", error);
+      }
+    };
+    loadDossier();
+  }, []);
 
   const handleNavigate = (step: CaseStep) => {
     // Basic guard: don't navigate if processing or if trying to see dossier without generation
@@ -37,9 +55,19 @@ const App: React.FC = () => {
   const startAnalysis = async () => {
     setIsProcessing(true);
     setCurrentStep(CaseStep.AI_ANALYSIS);
-    
+
     try {
       const result = await analyzeDocumentsAndFacts(facts, files);
+
+      // Save to Supabase
+      try {
+        await dossierService.createDossier(result);
+        console.log("Dossier saved to Supabase");
+      } catch (saveError) {
+        console.error("Failed to save dossier to Supabase:", saveError);
+        alert("Atenção: O dossiê foi gerado mas não pôde ser salvo no banco de dados.");
+      }
+
       setDossier(result);
       setCurrentStep(CaseStep.DOSSIER_REVIEW);
     } catch (err) {
@@ -54,22 +82,22 @@ const App: React.FC = () => {
     switch (currentStep) {
       case CaseStep.INITIAL_FACTS:
         return (
-          <StepFacts 
-            facts={facts} 
+          <StepFacts
+            facts={facts}
             files={files}
-            onChange={handleFactsChange} 
+            onChange={handleFactsChange}
             onUpload={handleFileUpload}
             onRemove={handleFileRemove}
-            onNext={() => setCurrentStep(CaseStep.DOCUMENT_UPLOAD)} 
+            onNext={() => setCurrentStep(CaseStep.DOCUMENT_UPLOAD)}
           />
         );
       case CaseStep.DOCUMENT_UPLOAD:
         return (
-          <StepUpload 
-            files={files} 
-            onUpload={handleFileUpload} 
-            onRemove={handleFileRemove} 
-            onNext={startAnalysis} 
+          <StepUpload
+            files={files}
+            onUpload={handleFileUpload}
+            onRemove={handleFileRemove}
+            onNext={startAnalysis}
             onBack={() => setCurrentStep(CaseStep.INITIAL_FACTS)}
           />
         );
@@ -77,15 +105,15 @@ const App: React.FC = () => {
         return <StepAnalysis />;
       case CaseStep.DOSSIER_REVIEW:
         return dossier ? (
-          <DossierView 
-            dossier={dossier} 
-            onNext={() => setCurrentStep(CaseStep.EVIDENCE_GATHERING)} 
+          <DossierView
+            dossier={dossier}
+            onNext={() => setCurrentStep(CaseStep.EVIDENCE_GATHERING)}
           />
         ) : null;
       case CaseStep.EVIDENCE_GATHERING:
         return dossier ? (
-          <EvidenceGathering 
-            evidence={dossier.suggestedEvidence} 
+          <EvidenceGathering
+            evidence={dossier.suggestedEvidence}
             onFinish={() => alert("Dossiê enviado com sucesso para análise jurídica profissional!")}
           />
         ) : null;
@@ -96,12 +124,12 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-50">
-      <Sidebar 
-        currentStep={currentStep} 
-        onNavigate={handleNavigate} 
-        isProcessing={isProcessing} 
+      <Sidebar
+        currentStep={currentStep}
+        onNavigate={handleNavigate}
+        isProcessing={isProcessing}
       />
-      
+
       <main className="flex-1 overflow-hidden relative">
         <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -109,7 +137,7 @@ const App: React.FC = () => {
             <i className="fas fa-chevron-right text-xs text-slate-300"></i>
             <span className="text-slate-900 font-bold">{currentStep.replace('_', ' ')}</span>
           </div>
-          
+
           <div className="flex items-center gap-6">
             <div className="flex -space-x-2">
               <img className="w-8 h-8 rounded-full border-2 border-white" src="https://picsum.photos/32/32?1" alt="lawyer" />
