@@ -1,0 +1,8 @@
+{
+  "name": "JuriGen - Legal Dossier Intelligence",
+  "description": "A sophisticated AI-powered system for generating comprehensive legal dossiers from documents, facts, and multimedia evidence, guiding users through the evidence collection process for professional lawyer review.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
